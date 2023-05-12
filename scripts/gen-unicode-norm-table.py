@@ -68,11 +68,7 @@ for mapping in compose_data:
 
 pairs.sort(key=lambda x: x[0])
 
-# Make sure that needles are unique.
-needles = set()
-for pair in pairs:
-    needles.add(pair[0])
-
+needles = {pair[0] for pair in pairs}
 assert len(pairs) == len(needles)
 
 for pair in pairs:

@@ -15,7 +15,7 @@ DEPENDENCIES = [
 
 for dep in DEPENDENCIES:
     if not os.path.exists(dep):
-        urllib.request.urlretrieve('https://unicode.org/Public/12.0.0/ucd/' + dep, dep)
+        urllib.request.urlretrieve(f'https://unicode.org/Public/12.0.0/ucd/{dep}', dep)
 
 ALLOWED_SINGLES = [0x00A0, 0x25CC]
 ALLOWED_BLOCKS = [
@@ -43,10 +43,10 @@ ALLOWED_BLOCKS = [
 
 files = [io.open(x, encoding='utf-8') for x in DEPENDENCIES]
 
-headers = [[f.readline() for i in range(2)] for f in files]
+headers = [[f.readline() for _ in range(2)] for f in files]
 
-data = [{} for f in files]
-values = [{} for f in files]
+data = [{} for _ in files]
+values = [{} for _ in files]
 for i, f in enumerate(files):
     for line in f:
         j = line.find('#')
@@ -59,11 +59,7 @@ for i, f in enumerate(files):
 
         uu = fields[0].split('..')
         start = int(uu[0], 16)
-        if len(uu) == 1:
-            end = start
-        else:
-            end = int(uu[1], 16)
-
+        end = start if len(uu) == 1 else int(uu[1], 16)
         t = fields[1]
 
         for u in range(start, end + 1):
@@ -139,15 +135,22 @@ for i in range(2):
                 raise Exception('Duplicate short value alias', v, all_shorts[i][s])
             all_shorts[i][s] = v
             short[i][v] = s
-        cat_defs.append((what_short[i] + '_' + s, what[i] + '::' + v.replace('_', ''), str(values[i][v]), v))
+        cat_defs.append(
+            (
+                f'{what_short[i]}_{s}',
+                f'{what[i]}::' + v.replace('_', ''),
+                str(values[i][v]),
+                v,
+            )
+        )
 
-maxlen_s = max([len(c[0]) for c in cat_defs])
-maxlen_l = max([len(c[1]) for c in cat_defs])
-maxlen_n = max([len(c[2]) for c in cat_defs])
+maxlen_s = max(len(c[0]) for c in cat_defs)
+maxlen_l = max(len(c[1]) for c in cat_defs)
+maxlen_n = max(len(c[2]) for c in cat_defs)
 for s in what_short:
     print()
     for c in [c for c in cat_defs if s in c[0]]:
-        print('use %s as %s;' % (c[1].ljust(maxlen_l), c[0]))
+        print(f'use {c[1].ljust(maxlen_l)} as {c[0]};')
 print()
 print()
 
@@ -161,7 +164,7 @@ def print_block(block, start, end, data):
     if block and block != last_block:
         print()
         print()
-        print('  /* %s */' % block)
+        print(f'  /* {block} */')
     num = 0
     assert start % 8 == 0
     assert (end + 1) % 8 == 0
@@ -172,7 +175,7 @@ def print_block(block, start, end, data):
         if u in data:
             num += 1
         d = data.get(u, defaults)
-        print('%16s' % ('(ISC_%s,IMC_%s),' % (short[0][d[0]], short[1][d[1]])), end='')
+        print('%16s' % f'(ISC_{short[0][d[0]]},IMC_{short[1][d[1]]}),', end='')
 
     total += end - start + 1
     used += num
@@ -228,7 +231,7 @@ for o in offsets:
 print()
 print('pub fn get_categories(u: u32) -> (SyllabicCategory, MatraCategory) {')
 print('    match u >> %d {' % page_bits)
-pages = set([u >> page_bits for u in starts + ends + list(singles.keys())])
+pages = {u >> page_bits for u in starts + ends + list(singles.keys())}
 for p in sorted(pages):
     print('        0x%0X => {' % p)
     for u, d in singles.items():

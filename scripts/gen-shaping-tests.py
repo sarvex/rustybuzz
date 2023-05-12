@@ -78,11 +78,7 @@ def convert_test(hb_dir, hb_shape_exe, tests_name, file_name, idx, data, fonts):
     # because hb sometimes stores results for freetype and not for embedded OpenType
     # engine, which we are using.
     # Right now, it only affects 'text-rendering-tests'.
-    if len(options) != 0:
-        options_list = options.split(' ')
-    else:
-        options_list = []
-
+    options_list = options.split(' ') if len(options) != 0 else []
     options_list.insert(0, str(hb_shape_exe))
 
     # Force OT functions, since this is the only one we support in rustybuzz.

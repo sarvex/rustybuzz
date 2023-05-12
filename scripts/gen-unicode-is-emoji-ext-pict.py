@@ -46,6 +46,6 @@ while idx < len(ranges)-1:
 
 for range in ranges:
     if range[0] == range[1]:
-        print('0x{} => true,'.format(range[0], range[1]))
+        print(f'0x{range[0]} => true,')
     else:
-        print('0x{}..=0x{} => true,'.format(range[0], range[1]))
+        print(f'0x{range[0]}..=0x{range[1]} => true,')

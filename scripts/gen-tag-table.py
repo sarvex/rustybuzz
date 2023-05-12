@@ -353,7 +353,7 @@ class OpenTypeRegistryParser(HTMLParser):
             tag = self._current_tr[1].strip("\t\n\v\f\r '")
             rank = 0
             if len(tag) > 4:
-                expect(tag.endswith('(deprecated)'), 'ill-formed OpenType tag: %s' % tag)
+                expect(tag.endswith('(deprecated)'), f'ill-formed OpenType tag: {tag}')
                 name += '(deprecated)'
                 tag = tag.split(' ')[0]
                 rank = 1
@@ -370,10 +370,10 @@ class OpenTypeRegistryParser(HTMLParser):
             self._current_tr[-1] += data
 
     def handle_charref(self, name):
-        self.handle_data(html_unescape(self, '&#%s;' % name))
+        self.handle_data(html_unescape(self, f'&#{name};'))
 
     def handle_entityref(self, name):
-        self.handle_data(html_unescape(self, '&%s;' % name))
+        self.handle_data(html_unescape(self, f'&{name};'))
 
     def parse(self, filename):
         """Parse the OpenType language system tag registry.
@@ -406,11 +406,12 @@ class OpenTypeRegistryParser(HTMLParser):
             try:
                 [macrolanguage, suffix] = bcp_47_tag.split('-', 1)
                 if macrolanguage in bcp_47.macrolanguages:
-                    s = set()
-                    for language in bcp_47.macrolanguages[macrolanguage]:
-                        if language.lower() not in bcp_47.grandfathered:
-                            s.add('%s-%s' %(language, suffix))
-                    bcp_47.macrolanguages['%s-%s' %(macrolanguage, suffix)] = s
+                    s = {
+                        f'{language}-{suffix}'
+                        for language in bcp_47.macrolanguages[macrolanguage]
+                        if language.lower() not in bcp_47.grandfathered
+                    }
+                    bcp_47.macrolanguages[f'{macrolanguage}-{suffix}'] = s
             except ValueError:
                 pass
 
@@ -453,8 +454,9 @@ class OpenTypeRegistryParser(HTMLParser):
         global bcp_47
         original_ot_from_bcp_47 = dict(self.from_bcp_47)
         for macrolanguage, languages in dict(bcp_47.macrolanguages).items():
-            ot_macrolanguages = set(original_ot_from_bcp_47.get(macrolanguage, set()))
-            if ot_macrolanguages:
+            if ot_macrolanguages := set(
+                original_ot_from_bcp_47.get(macrolanguage, set())
+            ):
                 for ot_macrolanguage in ot_macrolanguages:
                     for language in languages:
                         # Remove the following condition if e.g. nn should map to NYN,NOR
@@ -466,11 +468,8 @@ class OpenTypeRegistryParser(HTMLParser):
                 for language in languages:
                     if language in original_ot_from_bcp_47:
                         if ot_macrolanguages:
-                            ml = original_ot_from_bcp_47[language]
-                            if ml:
+                            if ml := original_ot_from_bcp_47[language]:
                                 ot_macrolanguages &= ml
-                            else:
-                                pass
                         else:
                             ot_macrolanguages |= original_ot_from_bcp_47[language]
                     else:
@@ -552,7 +551,7 @@ class BCP47Parser(object):
                         self.names[subtag] += '\n' + description
                     else:
                         self.names[subtag] = description
-                elif subtag_type == 'language' or subtag_type == 'grandfathered':
+                elif subtag_type in ['language', 'grandfathered']:
                     if line.startswith('Scope: '):
                         scope = line.split(' ')[1]
                         if scope == 'macrolanguage':
@@ -780,9 +779,7 @@ def rank_delta(bcp_47, ot):
     """
     if bcp_47 == 'ak' and ot == 'AKA':
         return -1
-    if bcp_47 == 'tw' and ot == 'TWI':
-        return -1
-    return 0
+    return -1 if bcp_47 == 'tw' and ot == 'TWI' else 0
 
 
 disambiguation = {
@@ -851,10 +848,13 @@ def get_variant_set(name):
     Returns:
         A set of normalized language names.
     """
-    return set(unicodedata.normalize('NFD', n.replace('\u2019', u"'"))
-               .encode('ASCII', 'ignore')
-               .strip()
-               for n in re.split('[\n(),]', name) if n)
+    return {
+        unicodedata.normalize('NFD', n.replace('\u2019', u"'"))
+        .encode('ASCII', 'ignore')
+        .strip()
+        for n in re.split('[\n(),]', name)
+        if n
+    }
 
 
 def language_name_intersection(a, b):
@@ -892,11 +892,11 @@ for language, tags in sorted(ot.from_bcp_47.items()):
         intersection = language_name_intersection(bcp_47_name, ot.names[tag])
         scope = bcp_47.scopes.get(language, '')
         if not intersection:
-            print('%s%s -> %s' % (bcp_47_name_candidates[0], scope, ot.names[tag]))
+            print(f'{bcp_47_name_candidates[0]}{scope} -> {ot.names[tag]}')
         else:
             name = get_matching_language_name(intersection, bcp_47_name_candidates)
             bcp_47.names[language] = name
-            print('%s%s' % (name if len(name) > len(ot.names[tag]) else ot.names[tag], scope))
+            print(f'{name if len(name) > len(ot.names[tag]) else ot.names[tag]}{scope}')
 
 print('];')
 print()
@@ -941,7 +941,7 @@ def print_subtag_matches(subtag, new_line):
     if subtag:
         if new_line:
             print(' && ', end='')
-        print('subtag_matches(language, "-%s") ' % subtag, end='')
+        print(f'subtag_matches(language, "-{subtag}") ', end='')
 
 
 complex_tags = collections.defaultdict(list)
@@ -959,22 +959,24 @@ for initial, items in sorted(complex_tags.items()):
 
     for lt, tags in items:
         if lt.variant in bcp_47.prefixes:
-            expect(next(iter(bcp_47.prefixes[lt.variant])) == lt.language,
-                   '%s is not a valid prefix of %s' %(lt.language, lt.variant))
+            expect(
+                next(iter(bcp_47.prefixes[lt.variant])) == lt.language,
+                f'{lt.language} is not a valid prefix of {lt.variant}',
+            )
 
         print('    if ', end='')
         print_subtag_matches(lt.script, False)
         print_subtag_matches(lt.region, False)
         print_subtag_matches(lt.variant, False)
         print(' {')
-        print('        // %s' % bcp_47.get_name(lt))
+        print(f'        // {bcp_47.get_name(lt)}')
 
         if len(tags) == 1:
-            print('        tags.push(%s); // %s' % (hb_tag(tags[0]), ot.names[tags[0]]))
+            print(f'        tags.push({hb_tag(tags[0])}); // {ot.names[tags[0]]}')
         else:
             print('        let possible_tags = &[')
             for tag in tags:
-                print('      %s, // %s' % (hb_tag(tag), ot.names[tag]))
+                print(f'      {hb_tag(tag)}, // {ot.names[tag]}')
             print('                ];')
             print('      tags.extend_from_slice(possible_tags);')
         print('        return true;')
@@ -989,31 +991,31 @@ for initial, items in sorted(complex_tags.items()):
     for lt, tags in items:
         print('            if ', end='')
         if lt.grandfathered:
-            print('&language[1..] == "%s" ' % lt.language[1:], end='')
+            print(f'&language[1..] == "{lt.language[1:]}" ', end='')
         else:
-            string_literal = lt.language[1:] + '-'
+            string_literal = f'{lt.language[1:]}-'
             if lt.script:
                 string_literal += lt.script
                 lt.script = None
                 if lt.region:
-                    string_literal += '-' + lt.region
+                    string_literal += f'-{lt.region}'
                     lt.region = None
             if string_literal[-1] == '-':
                 print('strncmp(&language[1..], "%s", %i)' % (string_literal, len(string_literal)), end='')
             else:
-                print('lang_matches(&language[1..], "%s")' % string_literal, end='')
+                print(f'lang_matches(&language[1..], "{string_literal}")', end='')
 
         print_subtag_matches(lt.script, True)
         print_subtag_matches(lt.region, True)
         print_subtag_matches(lt.variant, True)
         print('{')
-        print('                // %s' % bcp_47.get_name(lt))
+        print(f'                // {bcp_47.get_name(lt)}')
         if len(tags) == 1:
-            print('                tags.push(%s); // %s' % (hb_tag(tags[0]), ot.names[tags[0]]))
+            print(f'                tags.push({hb_tag(tags[0])}); // {ot.names[tags[0]]}')
         else:
             print('                let possible_tags = &[')
             for tag in tags:
-                print('                    %s, // %s' % (hb_tag(tag), ot.names[tag]))
+                print(f'                    {hb_tag(tag)}, // {ot.names[tag]}')
             print('                ];')
             print('                tags.extend_from_slice(possible_tags);')
         print('                return true;')

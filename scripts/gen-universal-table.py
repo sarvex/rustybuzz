@@ -11,15 +11,17 @@ BLACKLISTED_BLOCKS = ['Thai', 'Lao']
 files = ['IndicSyllabicCategory.txt', 'IndicPositionalCategory.txt', 'UnicodeData.txt', 'Blocks.txt']
 for f in files:
     if not os.path.exists(f):
-        urllib.request.urlretrieve('https://unicode.org/Public/12.0.0/ucd/' + f, f)
+        urllib.request.urlretrieve(f'https://unicode.org/Public/12.0.0/ucd/{f}', f)
 
 files = [io.open(x, encoding='utf-8') for x in files]
 
-headers = [[f.readline() for i in range(2)] for j, f in enumerate(files) if j != 2]
+headers = [
+    [f.readline() for _ in range(2)] for j, f in enumerate(files) if j != 2
+]
 headers.append(['UnicodeData.txt does not have a header.'])
 
-data = [{} for f in files]
-values = [{} for f in files]
+data = [{} for _ in files]
+values = [{} for _ in files]
 for i, f in enumerate(files):
     for line in f:
 
@@ -33,11 +35,7 @@ for i, f in enumerate(files):
 
         uu = fields[0].split('..')
         start = int(uu[0], 16)
-        if len(uu) == 1:
-            end = start
-        else:
-            end = int(uu[1], 16)
-
+        end = start if len(uu) == 1 else int(uu[1], 16)
         t = fields[1 if i != 2 else 2]
 
         for u in range(start, end + 1):
@@ -77,9 +75,9 @@ for i, v in enumerate(defaults):
 combined = {}
 for i, d in enumerate(data):
     for u, v in d.items():
-        if i >= 2 and not u in combined:
+        if i >= 2 and u not in combined:
             continue
-        if not u in combined:
+        if u not in combined:
             combined[u] = list(defaults)
         combined[u][i] = v
 combined = {k: v for k, v in combined.items() if v[3] not in BLACKLISTED_BLOCKS}
@@ -192,11 +190,25 @@ def is_BASE(U, UISC, UGC):
 
 def is_BASE_IND(U, UISC, UGC):
     # SPEC-DRAFT return (UISC in [Consonant_Dead, Modifying_Letter] or UGC == Po)
-    return (UISC in [Consonant_Dead, Modifying_Letter] or
-            (UGC == Po and not U in [0x104B, 0x104E, 0x1B5B, 0x1B5C, 0x1B5F, 0x2022, 0x111C8, 0x11A3F, 0x11A45, 0x11C44,
-                                     0x11C45]) or
-            False  # SPEC-DRAFT-OUTDATED! U == 0x002D
-            )
+    return (
+        UISC in [Consonant_Dead, Modifying_Letter]
+        or UGC == Po
+        and U
+        not in [
+            0x104B,
+            0x104E,
+            0x1B5B,
+            0x1B5C,
+            0x1B5F,
+            0x2022,
+            0x111C8,
+            0x11A3F,
+            0x11A45,
+            0x11C44,
+            0x11C45,
+        ]
+        or False
+    )
 
 
 def is_BASE_NUM(U, UISC, UGC):
@@ -294,9 +306,7 @@ def is_SAKOT(U, UISC, UGC):
 
 
 def is_SYM(U, UISC, UGC):
-    if U == 0x25CC: return False  # SPEC-DRAFT
-    # SPEC-DRAFT return UGC in [So, Sc] or UISC == Symbol_Letter
-    return UGC in [So, Sc] and U not in [0x1B62, 0x1B68]
+    return False if U == 0x25CC else UGC in [So, Sc] and U not in [0x1B62, 0x1B68]
 
 
 def is_SYM_MOD(U, UISC, UGC):
@@ -408,9 +418,8 @@ def map_to_use(data):
         if 0x0F86 <= U <= 0x0F87: UISC = Tone_Mark
         # Overrides to allow NFC order matching syllable
         # https://github.com/harfbuzz/harfbuzz/issues/1012
-        if UBlock == 'Tibetan' and is_VOWEL(U, UISC, UGC):
-            if UIPC == Top:
-                UIPC = Bottom
+        if UBlock == 'Tibetan' and is_VOWEL(U, UISC, UGC) and UIPC == Top:
+            UIPC = Bottom
 
         # TODO: https://github.com/harfbuzz/harfbuzz/pull/982
         # also  https://github.com/harfbuzz/harfbuzz/issues/1012
@@ -431,7 +440,7 @@ def map_to_use(data):
         if U == 0x11134: UISC = Gemination_Mark
 
         values = [k for k, v in items if v(U, UISC, UGC)]
-        assert len(values) == 1, '%s %s %s %s' % (hex(U), UISC, UGC, values)
+        assert len(values) == 1, f'{hex(U)} {UISC} {UGC} {values}'
         USE = values[0]
 
         # Resolve Indic_Positional_Category
@@ -453,13 +462,13 @@ def map_to_use(data):
         if U == 0x1171E: UIPC = Left
         if 0x1CF8 <= U <= 0x1CF9: UIPC = Top
 
-        assert (UIPC in [Not_Applicable, Visual_Order_Left] or
-                USE in use_positions), '%s %s %s %s %s' % (hex(U), UIPC, USE, UISC, UGC)
+        assert (
+            UIPC in [Not_Applicable, Visual_Order_Left] or USE in use_positions
+        ), f'{hex(U)} {UIPC} {USE} {UISC} {UGC}'
 
-        pos_mapping = use_positions.get(USE, None)
-        if pos_mapping:
+        if pos_mapping := use_positions.get(USE, None):
             values = [k for k, v in pos_mapping.items() if v and UIPC in v]
-            assert len(values) == 1, '%s %s %s %s %s %s' % (hex(U), UIPC, USE, UISC, UGC, values)
+            assert len(values) == 1, f'{hex(U)} {UIPC} {USE} {UISC} {UGC} {values}'
             USE = USE + values[0]
 
         out[U] = (USE, UBlock)
@@ -483,7 +492,7 @@ def print_block(block, start, end, data):
     if block and block != last_block:
         print()
         print()
-        print('  /* %s */' % block)
+        print(f'  /* {block} */')
         if start % 16:
             print(' ' * (20 + (start % 16 * 6)), end='')
     num = 0
@@ -551,7 +560,7 @@ for o in offsets:
 print()
 print('pub fn get_category(u: u32) -> Category {')
 print('    match u >> %d {' % page_bits)
-pages = set([u >> page_bits for u in starts + ends])
+pages = {u >> page_bits for u in starts + ends}
 for p in sorted(pages):
     print('        0x%0X => {' % p)
     for (start, end) in zip(starts, ends):

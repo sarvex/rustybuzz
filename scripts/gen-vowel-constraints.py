@@ -9,6 +9,7 @@ circles into sequences prohibited by the USE script development spec.
 Based on harfbuzz/src/gen-vowel-constraints.py
 """
 
+
 import collections
 import io
 import os
@@ -18,7 +19,7 @@ if not os.path.exists('Scripts.txt'):
     urllib.request.urlretrieve('https://unicode.org/Public/12.0.0/ucd/Scripts.txt', 'Scripts.txt')
 
 with io.open('Scripts.txt', encoding='utf-8') as f:
-    scripts_header = [f.readline() for i in range(2)]
+    scripts_header = [f.readline() for _ in range(2)]
     scripts = {}
     script_order = {}
     for line in f:
@@ -30,10 +31,7 @@ with io.open('Scripts.txt', encoding='utf-8') as f:
             continue
         uu = fields[0].split('..')
         start = int(uu[0], 16)
-        if len(uu) == 1:
-            end = start
-        else:
-            end = int(uu[1], 16)
+        end = start if len(uu) == 1 else int(uu[1], 16)
         script = fields[1]
         for u in range(start, end + 1):
             scripts[u] = script
@@ -62,14 +60,14 @@ class ConstraintSet(object):
         """Add a constraint to this set."""
         if not constraint:
             return
-        first = constraint[0]
-        rest = constraint[1:]
         if isinstance(self._c, list):
             if constraint == self._c[:len(constraint)]:
                 self._c = constraint
             elif self._c != constraint[:len(self._c)]:
                 self._c = {self._c[0]: ConstraintSet(self._c[1:])}
         if isinstance(self._c, dict):
+            first = constraint[0]
+            rest = constraint[1:]
             if first in self._c:
                 self._c[first].add(rest)
             else:
@@ -88,17 +86,18 @@ class ConstraintSet(object):
             else:
                 s.append('if 0x{:04X} == buffer.cur({}).glyph_id &&\n'.format(self._c[0], index))
                 if index:
-                    s.append('buffer.idx + {} < buffer.len &&\n'.format(index + 1))
-                for i, cp in enumerate(self._c[1:], start=1):
-                    s.append('0x{:04X} == buffer.cur({}).glyph_id{}\n'.format(
-                        cp, index + i, '' if i == len(self._c) - 1 else ' &&'))
+                    s.append(f'buffer.idx + {index + 1} < buffer.len &&\n')
+                s.extend(
+                    '0x{:04X} == buffer.cur({}).glyph_id{}\n'.format(
+                        cp, index + i, '' if i == len(self._c) - 1 else ' &&'
+                    )
+                    for i, cp in enumerate(self._c[1:], start=1)
+                )
                 s.append('{\n')
-                for i in range(index + 1):
-                    s.append('buffer.next_glyph();\n')
-                s.append('output_dotted_circle(buffer);\n')
-                s.append('}\n')
+                s.extend('buffer.next_glyph();\n' for _ in range(index + 1))
+                s.extend(('output_dotted_circle(buffer);\n', '}\n'))
         else:
-            s.append('match buffer.cur({}).glyph_id {{\n'.format(index))
+            s.append(f'match buffer.cur({index}).glyph_id {{\n')
             cases = collections.defaultdict(set)
             for first, rest in sorted(self._c.items()):
                 cases[rest.__str__(index + 1, depth + 2)].add(first)
@@ -108,8 +107,7 @@ class ConstraintSet(object):
                         s.append(' 0x{:04X} => {{ {}'.format(cp, '\n' if i % 4 == 3 else ''))
                     else:
                         s.append(' 0x{:04X} | {}'.format(cp, '\n' if i % 4 == 3 else ''))
-                s.append(body)
-                s.append('}')
+                s.extend((body, '}'))
                 if ii == len(cases.items()) - 1:
                     s.append('_ => {}')
             s.append('}\n')
@@ -131,7 +129,7 @@ with io.open('ms-use/IndicShapingInvalidCluster.txt', encoding='utf-8') as f:
         constraint = [int(cp, 16) for cp in line.split(';')[0].split()]
         if not constraint:
             continue
-        assert 2 <= len(constraint), 'Prohibited sequence is too short: {}'.format(constraint)
+        assert 2 <= len(constraint), f'Prohibited sequence is too short: {constraint}'
         script = scripts[constraint[0]]
         if script in constraints:
             constraints[script].add(constraint)
@@ -172,12 +170,12 @@ print('    buffer.clear_output();')
 print('    match buffer.script {')
 
 for script, constraints in sorted(constraints.items(), key=lambda s_c: script_order[s_c[0]]):
-    print('        Some(script::{}) => {{'.format(script.upper()))
+    print(f'        Some(script::{script.upper()}) => {{')
     print('            buffer.idx = 0;')
     print('            while buffer.idx + 1 < buffer.len {')
     print('               #[allow(unused_mut)]')
     print('                let mut matched = false;')
-    print(str(constraints), end='')
+    print(constraints, end='')
     print('                buffer.next_glyph();')
     print('                if matched { output_with_dotted_circle(buffer); }')
     print('      }')
